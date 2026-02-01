@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -34,12 +34,12 @@ type Config struct {
 	Workflows     map[string]WorkflowConfig `yaml:"workflows"`
 }
 
-func defaultConfigPath() string {
+func DefaultPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".hookrunner", "config.yaml")
 }
 
-func expandTilde(path string) string {
+func ExpandTilde(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, path[2:])
@@ -47,8 +47,8 @@ func expandTilde(path string) string {
 	return path
 }
 
-func loadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(expandTilde(path))
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(ExpandTilde(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
@@ -58,16 +58,16 @@ func loadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	applyDefaults(cfg)
+	ApplyDefaults(cfg)
 
-	if err := validateConfig(cfg); err != nil {
+	if err := ValidateConfig(cfg); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
 }
 
-func applyDefaults(cfg *Config) {
+func ApplyDefaults(cfg *Config) {
 	if cfg.Port == 0 {
 		cfg.Port = 7890
 	}
@@ -85,7 +85,7 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-func validateConfig(cfg *Config) error {
+func ValidateConfig(cfg *Config) error {
 	if cfg.WebhookSecret == "" {
 		return fmt.Errorf("webhook_secret is required")
 	}
@@ -103,7 +103,7 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-const defaultConfigYAML = `webhook_secret: "changeme"
+const DefaultConfigYAML = `webhook_secret: "changeme"
 port: 7890
 funnel:
   enabled: true
@@ -119,8 +119,8 @@ workflows:
     timeout: 300
 `
 
-func generateDefaultConfig(path string) error {
-	path = expandTilde(path)
+func GenerateDefault(path string) error {
+	path = ExpandTilde(path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
@@ -130,5 +130,5 @@ func generateDefaultConfig(path string) error {
 		return fmt.Errorf("config already exists at %s", path)
 	}
 
-	return os.WriteFile(path, []byte(defaultConfigYAML), 0600)
+	return os.WriteFile(path, []byte(DefaultConfigYAML), 0600)
 }

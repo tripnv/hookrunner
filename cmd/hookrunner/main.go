@@ -8,13 +8,19 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"hookrunner/internal/config"
+	"hookrunner/internal/daemon"
+	"hookrunner/internal/funnel"
+	"hookrunner/internal/server"
+	"hookrunner/internal/webhook"
 )
 
 var version = "dev"
 
 func main() {
 	configPath := flag.String("config", "", "Config file path (default: ~/.hookrunner/config.yaml)")
-	daemon := flag.Bool("daemon", false, "Run as background daemon")
+	daemonFlag := flag.Bool("daemon", false, "Run as background daemon")
 	stop := flag.Bool("stop", false, "Stop running daemon")
 	status := flag.Bool("status", false, "Check daemon status")
 	port := flag.Int("port", 0, "Override config port")
@@ -29,11 +35,11 @@ func main() {
 	}
 
 	if *configPath == "" {
-		*configPath = defaultConfigPath()
+		*configPath = config.DefaultPath()
 	}
 
 	if *init_ {
-		if err := generateDefaultConfig(*configPath); err != nil {
+		if err := config.GenerateDefault(*configPath); err != nil {
 			log.Fatalf("Failed to generate config: %v", err)
 		}
 		fmt.Printf("Config written to %s\n", *configPath)
@@ -41,20 +47,20 @@ func main() {
 	}
 
 	if *stop {
-		if err := stopDaemon(*configPath); err != nil {
+		if err := daemon.Stop(*configPath); err != nil {
 			log.Fatalf("Failed to stop daemon: %v", err)
 		}
 		return
 	}
 
 	if *status {
-		if err := checkDaemonStatus(*configPath); err != nil {
+		if err := daemon.Status(*configPath); err != nil {
 			log.Fatalf("%v", err)
 		}
 		return
 	}
 
-	cfg, err := loadConfig(*configPath)
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -66,8 +72,8 @@ func main() {
 		cfg.Funnel.Enabled = false
 	}
 
-	if *daemon {
-		if err := daemonize(*configPath, cfg); err != nil {
+	if *daemonFlag {
+		if err := daemon.Daemonize(*configPath, cfg); err != nil {
 			log.Fatalf("Failed to daemonize: %v", err)
 		}
 		return
@@ -79,9 +85,9 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	var funnel *FunnelProcess
+	var fp *funnel.Process
 	if cfg.Funnel.Enabled {
-		funnel, err = startFunnel(cfg.Port, cfg.Funnel.URL)
+		fp, err = funnel.Start(cfg.Port, cfg.Funnel.URL)
 		if err != nil {
 			log.Printf("WARNING: Tailscale Funnel failed to start: %v", err)
 			log.Printf("Server will still start on 127.0.0.1:%d", cfg.Port)
@@ -90,9 +96,10 @@ func main() {
 		}
 	}
 
-	srv := newServer(cfg)
+	webhookHandler := webhook.Handler(cfg)
+	srv := server.New(cfg.Port, webhookHandler)
 	go func() {
-		if err := srv.start(); err != nil {
+		if err := srv.Start(); err != nil {
 			log.Printf("Server error: %v", err)
 			cancel()
 		}
@@ -101,8 +108,8 @@ func main() {
 	log.Printf("hookrunner listening on 127.0.0.1:%d", cfg.Port)
 
 	// Write PID file if running as daemon child
-	pidFile := expandTilde(cfg.Daemon.PIDFile)
-	if err := writePIDFile(pidFile); err != nil {
+	pidFile := config.ExpandTilde(cfg.Daemon.PIDFile)
+	if err := daemon.WritePIDFile(pidFile); err != nil {
 		log.Printf("WARNING: Failed to write PID file: %v", err)
 	}
 	defer os.Remove(pidFile)
@@ -113,10 +120,10 @@ func main() {
 	case <-ctx.Done():
 	}
 
-	srv.shutdown()
+	srv.Shutdown()
 
-	if funnel != nil {
-		stopFunnel(funnel)
+	if fp != nil {
+		funnel.Stop(fp)
 	}
 
 	log.Println("hookrunner stopped")

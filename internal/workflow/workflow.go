@@ -1,4 +1,4 @@
-package main
+package workflow
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"hookrunner/internal/config"
 )
 
 type TemplateVars struct {
@@ -22,22 +24,22 @@ type TemplateVars struct {
 
 var shellMetaChars = regexp.MustCompile(`[;&|$` + "`" + `\\!(){}\[\]<>*?~#'"\n\r]`)
 
-func sanitize(input string) string {
+func Sanitize(input string) string {
 	return shellMetaChars.ReplaceAllString(input, "")
 }
 
-func sanitizeVars(vars TemplateVars) TemplateVars {
+func SanitizeVars(vars TemplateVars) TemplateVars {
 	return TemplateVars{
-		RepoFullName:  sanitize(vars.RepoFullName),
-		RepoCloneURL:  sanitize(vars.RepoCloneURL),
-		PRNumber:      sanitize(vars.PRNumber),
-		CommentBody:   sanitize(vars.CommentBody),
-		CommentAuthor: sanitize(vars.CommentAuthor),
-		EventType:     sanitize(vars.EventType),
+		RepoFullName:  Sanitize(vars.RepoFullName),
+		RepoCloneURL:  Sanitize(vars.RepoCloneURL),
+		PRNumber:      Sanitize(vars.PRNumber),
+		CommentBody:   Sanitize(vars.CommentBody),
+		CommentAuthor: Sanitize(vars.CommentAuthor),
+		EventType:     Sanitize(vars.EventType),
 	}
 }
 
-func renderTemplate(tmpl string, vars TemplateVars) (string, error) {
+func RenderTemplate(tmpl string, vars TemplateVars) (string, error) {
 	t, err := template.New("cmd").Parse(tmpl)
 	if err != nil {
 		return "", err
@@ -49,10 +51,10 @@ func renderTemplate(tmpl string, vars TemplateVars) (string, error) {
 	return buf.String(), nil
 }
 
-func executeWorkflow(name string, wf WorkflowConfig, vars TemplateVars) {
-	safe := sanitizeVars(vars)
+func Execute(name string, wf config.WorkflowConfig, vars TemplateVars) {
+	safe := SanitizeVars(vars)
 
-	cmd, err := renderTemplate(wf.Command, safe)
+	cmd, err := RenderTemplate(wf.Command, safe)
 	if err != nil {
 		log.Printf("Workflow %q: template error: %v", name, err)
 		return
@@ -60,12 +62,12 @@ func executeWorkflow(name string, wf WorkflowConfig, vars TemplateVars) {
 
 	workdir := ""
 	if wf.Workdir != "" {
-		workdir, err = renderTemplate(wf.Workdir, safe)
+		workdir, err = RenderTemplate(wf.Workdir, safe)
 		if err != nil {
 			log.Printf("Workflow %q: workdir template error: %v", name, err)
 			return
 		}
-		workdir = expandTilde(workdir)
+		workdir = config.ExpandTilde(workdir)
 	}
 
 	timeout := time.Duration(wf.Timeout) * time.Second

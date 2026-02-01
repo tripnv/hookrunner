@@ -1,4 +1,4 @@
-package main
+package workflow
 
 import (
 	"testing"
@@ -20,9 +20,9 @@ func TestSanitize(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := sanitize(tt.input)
+		got := Sanitize(tt.input)
 		if got != tt.expected {
-			t.Errorf("sanitize(%q) = %q, want %q", tt.input, got, tt.expected)
+			t.Errorf("Sanitize(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
 }
@@ -38,7 +38,7 @@ func TestRenderTemplate(t *testing.T) {
 	}
 
 	t.Run("basic template", func(t *testing.T) {
-		result, err := renderTemplate("echo {{.RepoFullName}} #{{.PRNumber}}", vars)
+		result, err := RenderTemplate("echo {{.RepoFullName}} #{{.PRNumber}}", vars)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +49,7 @@ func TestRenderTemplate(t *testing.T) {
 
 	t.Run("all variables", func(t *testing.T) {
 		tmpl := "{{.RepoFullName}} {{.RepoCloneURL}} {{.PRNumber}} {{.CommentBody}} {{.CommentAuthor}} {{.EventType}}"
-		result, err := renderTemplate(tmpl, vars)
+		result, err := RenderTemplate(tmpl, vars)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -60,7 +60,7 @@ func TestRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
-		_, err := renderTemplate("{{.Invalid", vars)
+		_, err := RenderTemplate("{{.Invalid", vars)
 		if err == nil {
 			t.Error("expected error for invalid template")
 		}
@@ -74,7 +74,7 @@ func TestSanitizeVars(t *testing.T) {
 		CommentAuthor: "alice$(whoami)",
 	}
 
-	safe := sanitizeVars(vars)
+	safe := SanitizeVars(vars)
 
 	if safe.CommentBody != "hello rm -rf /" {
 		t.Errorf("CommentBody not sanitized: %q", safe.CommentBody)

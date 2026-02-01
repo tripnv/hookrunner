@@ -1,4 +1,4 @@
-package main
+package funnel
 
 import (
 	"fmt"
@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-type FunnelProcess struct {
+type Process struct {
 	cmd *exec.Cmd
 }
 
-func startFunnel(port int, urlOverride string) (*FunnelProcess, error) {
+func Start(port int, urlOverride string) (*Process, error) {
 	args := []string{"funnel", fmt.Sprintf("%d", port)}
 	cmd := exec.Command("tailscale", args...)
 	cmd.Stdout = os.Stdout
@@ -23,10 +23,10 @@ func startFunnel(port int, urlOverride string) (*FunnelProcess, error) {
 		return nil, fmt.Errorf("starting tailscale funnel: %w", err)
 	}
 
-	return &FunnelProcess{cmd: cmd}, nil
+	return &Process{cmd: cmd}, nil
 }
 
-func stopFunnel(fp *FunnelProcess) {
+func Stop(fp *Process) {
 	if fp == nil || fp.cmd == nil || fp.cmd.Process == nil {
 		return
 	}

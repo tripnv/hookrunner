@@ -1,4 +1,4 @@
-package main
+package daemon
 
 import (
 	"fmt"
@@ -8,10 +8,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"hookrunner/internal/config"
 )
 
-func daemonize(configPath string, cfg *Config) error {
-	logPath := expandTilde(cfg.Daemon.LogFile)
+func Daemonize(configPath string, cfg *config.Config) error {
+	logPath := config.ExpandTilde(cfg.Daemon.LogFile)
 	logDir := logPath[:strings.LastIndex(logPath, "/")]
 	if err := os.MkdirAll(logDir, 0700); err != nil {
 		return fmt.Errorf("creating log dir: %w", err)
@@ -61,7 +63,7 @@ func daemonize(configPath string, cfg *Config) error {
 	return nil
 }
 
-func writePIDFile(path string) error {
+func WritePIDFile(path string) error {
 	dir := path[:strings.LastIndex(path, "/")]
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -81,15 +83,15 @@ func readPIDFile(path string) (int, error) {
 	return pid, nil
 }
 
-func stopDaemon(configPath string) error {
-	cfg, err := loadConfig(configPath)
+func Stop(configPath string) error {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		// Try default PID path
-		cfg = &Config{}
-		applyDefaults(cfg)
+		cfg = &config.Config{}
+		config.ApplyDefaults(cfg)
 	}
 
-	pidPath := expandTilde(cfg.Daemon.PIDFile)
+	pidPath := config.ExpandTilde(cfg.Daemon.PIDFile)
 	pid, err := readPIDFile(pidPath)
 	if err != nil {
 		return fmt.Errorf("no running daemon found (PID file: %s): %w", pidPath, err)
@@ -124,14 +126,14 @@ func stopDaemon(configPath string) error {
 	return nil
 }
 
-func checkDaemonStatus(configPath string) error {
-	cfg, err := loadConfig(configPath)
+func Status(configPath string) error {
+	cfg, err := config.Load(configPath)
 	if err != nil {
-		cfg = &Config{}
-		applyDefaults(cfg)
+		cfg = &config.Config{}
+		config.ApplyDefaults(cfg)
 	}
 
-	pidPath := expandTilde(cfg.Daemon.PIDFile)
+	pidPath := config.ExpandTilde(cfg.Daemon.PIDFile)
 	pid, err := readPIDFile(pidPath)
 	if err != nil {
 		return fmt.Errorf("hookrunner is not running (no PID file at %s)", pidPath)

@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -19,9 +19,9 @@ func TestExpandTilde(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := expandTilde(tt.input)
+		got := ExpandTilde(tt.input)
 		if got != tt.expected {
-			t.Errorf("expandTilde(%q) = %q, want %q", tt.input, got, tt.expected)
+			t.Errorf("ExpandTilde(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
 }
@@ -32,7 +32,7 @@ func TestApplyDefaults(t *testing.T) {
 			"test": {Trigger: "foo", Command: "bar"},
 		},
 	}
-	applyDefaults(cfg)
+	ApplyDefaults(cfg)
 
 	if cfg.Port != 7890 {
 		t.Errorf("default port = %d, want 7890", cfg.Port)
@@ -48,14 +48,14 @@ func TestApplyDefaults(t *testing.T) {
 func TestValidateConfig(t *testing.T) {
 	t.Run("missing secret", func(t *testing.T) {
 		cfg := &Config{Port: 7890}
-		if err := validateConfig(cfg); err == nil {
+		if err := ValidateConfig(cfg); err == nil {
 			t.Error("expected error for missing secret")
 		}
 	})
 
 	t.Run("invalid port", func(t *testing.T) {
 		cfg := &Config{WebhookSecret: "s", Port: 0}
-		if err := validateConfig(cfg); err == nil {
+		if err := ValidateConfig(cfg); err == nil {
 			t.Error("expected error for invalid port")
 		}
 	})
@@ -68,7 +68,7 @@ func TestValidateConfig(t *testing.T) {
 				"test": {Command: "echo"},
 			},
 		}
-		if err := validateConfig(cfg); err == nil {
+		if err := ValidateConfig(cfg); err == nil {
 			t.Error("expected error for missing trigger")
 		}
 	})
@@ -81,7 +81,7 @@ func TestValidateConfig(t *testing.T) {
 				"test": {Trigger: "foo", Command: "bar"},
 			},
 		}
-		if err := validateConfig(cfg); err != nil {
+		if err := ValidateConfig(cfg); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -101,7 +101,7 @@ workflows:
 `
 	os.WriteFile(path, []byte(yaml), 0600)
 
-	cfg, err := loadConfig(path)
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,12 +121,12 @@ func TestGenerateDefaultConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "config.yaml")
 
-	if err := generateDefaultConfig(path); err != nil {
+	if err := GenerateDefault(path); err != nil {
 		t.Fatal(err)
 	}
 
 	// Should fail on second call (already exists)
-	if err := generateDefaultConfig(path); err == nil {
+	if err := GenerateDefault(path); err == nil {
 		t.Error("expected error when config exists")
 	}
 

@@ -1,4 +1,4 @@
-package main
+package webhook
 
 import (
 	"crypto/hmac"
@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"hookrunner/internal/config"
 )
 
 func computeHMAC(payload, secret string) string {
@@ -23,25 +25,25 @@ func TestVerifySignature(t *testing.T) {
 
 	t.Run("valid signature", func(t *testing.T) {
 		sig := computeHMAC(string(payload), secret)
-		if !verifySignature(payload, sig, secret) {
+		if !VerifySignature(payload, sig, secret) {
 			t.Error("expected valid signature")
 		}
 	})
 
 	t.Run("invalid signature", func(t *testing.T) {
-		if verifySignature(payload, "sha256=deadbeef", secret) {
+		if VerifySignature(payload, "sha256=deadbeef", secret) {
 			t.Error("expected invalid signature")
 		}
 	})
 
 	t.Run("missing prefix", func(t *testing.T) {
-		if verifySignature(payload, "deadbeef", secret) {
+		if VerifySignature(payload, "deadbeef", secret) {
 			t.Error("expected rejection without sha256= prefix")
 		}
 	})
 
 	t.Run("empty secret", func(t *testing.T) {
-		if verifySignature(payload, "sha256=abc", "") {
+		if VerifySignature(payload, "sha256=abc", "") {
 			t.Error("expected rejection with empty secret")
 		}
 	})
@@ -70,10 +72,10 @@ func makeTestPayload(action, body, repo string, prNum int) string {
 
 func TestWebhookHandler(t *testing.T) {
 	secret := "test-secret"
-	cfg := &Config{
+	cfg := &config.Config{
 		WebhookSecret: secret,
 		Port:          7890,
-		Workflows: map[string]WorkflowConfig{
+		Workflows: map[string]config.WorkflowConfig{
 			"test": {
 				Trigger: `/cc\s+@claude`,
 				Command: "echo test",
@@ -82,12 +84,12 @@ func TestWebhookHandler(t *testing.T) {
 		},
 	}
 
-	srv := newServer(cfg)
+	handler := Handler(cfg)
 
 	t.Run("rejects GET", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/webhook", nil)
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("expected 405, got %d", w.Code)
 		}
@@ -99,7 +101,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", "sha256=invalid")
 		req.Header.Set("X-GitHub-Event", "issue_comment")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusForbidden {
 			t.Errorf("expected 403, got %d", w.Code)
 		}
@@ -112,7 +114,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", sig)
 		req.Header.Set("X-GitHub-Event", "push")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
@@ -125,7 +127,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", sig)
 		req.Header.Set("X-GitHub-Event", "issue_comment")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
@@ -141,7 +143,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", sig)
 		req.Header.Set("X-GitHub-Event", "issue_comment")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
@@ -157,7 +159,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", sig)
 		req.Header.Set("X-GitHub-Event", "issue_comment")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusAccepted {
 			t.Errorf("expected 202, got %d", w.Code)
 		}
@@ -170,7 +172,7 @@ func TestWebhookHandler(t *testing.T) {
 		req.Header.Set("X-Hub-Signature-256", sig)
 		req.Header.Set("X-GitHub-Event", "issue_comment")
 		w := httptest.NewRecorder()
-		srv.handleWebhook(w, req)
+		handler(w, req)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
