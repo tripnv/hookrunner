@@ -4,7 +4,7 @@
 
 hookrunner is a lightweight local GitHub webhook server written in Go. It listens for incoming GitHub webhook events and dispatches local shell workflows in response to specific triggers -- most notably `/cc @<name>` mentions in pull request comments and reviews.
 
-The primary use case is enabling local automation: for example, triggering Claude to review a PR when someone comments `/cc @claude` on it.
+The primary use case is enabling local automation: for example, triggering a workflow when someone comments `/cc` on a PR.
 
 ---
 
@@ -97,7 +97,7 @@ daemon:
 
 workflows:
   claude-review:
-    trigger: '/cc\s+@claude'           # Required. Regex to match against event body.
+    trigger: '/cc'                      # Required. Regex to match against event body.
     command: 'claude -p "Review PR #{{.PRNumber}} in {{.RepoFullName}}"'
     workdir: '/path/to/repos/{{.RepoFullName}}'  # Optional. Supports templates.
     timeout: 300                       # Optional. Seconds. Default: 300.
@@ -263,4 +263,4 @@ $EDITOR ~/.hookrunner/config.yaml
    - **Content type:** `application/json`
    - **Secret:** Same value as `webhook_secret`
    - **Events:** Select the events your workflows need (issues, pull requests, PR reviews)
-6. Comment `/cc @claude` (or whatever your trigger pattern is) on a PR to test.
+6. Comment `/cc` (or whatever your trigger pattern is) on a PR to test.
