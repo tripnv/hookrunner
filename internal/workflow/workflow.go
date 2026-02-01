@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -77,6 +78,13 @@ func Execute(name string, wf config.WorkflowConfig, vars TemplateVars) {
 	log.Printf("Workflow %q: executing: %s", name, cmd)
 
 	proc := exec.CommandContext(ctx, "sh", "-c", cmd)
+	proc.Env = append(os.Environ(),
+		"HR_PR_NUMBER="+vars.PRNumber,
+		"HR_REPO="+vars.RepoFullName,
+		"HR_COMMENT_BODY="+vars.CommentBody,
+		"HR_COMMENT_AUTHOR="+vars.CommentAuthor,
+		"HR_EVENT_TYPE="+vars.EventType,
+	)
 	if workdir != "" {
 		proc.Dir = workdir
 	}

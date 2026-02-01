@@ -27,8 +27,15 @@ type webhookEvent struct {
 	Issue struct {
 		Number int `json:"number"`
 	} `json:"issue"`
+	Review struct {
+		Body string `json:"body"`
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	} `json:"review"`
 	PullRequest struct {
-		Number int `json:"number"`
+		Number int  `json:"number"`
+		Merged bool `json:"merged"`
 	} `json:"pull_request"`
 	Repository struct {
 		FullName string `json:"full_name"`
@@ -55,14 +62,6 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 		}
 
 		eventType := r.Header.Get("X-GitHub-Event")
-		switch eventType {
-		case "issue_comment", "pull_request_review_comment":
-			// process below
-		default:
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("event ignored\n"))
-			return
-		}
 
 		var event webhookEvent
 		if err := json.Unmarshal(body, &event); err != nil {
@@ -70,16 +69,42 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
-		if event.Action != "created" {
+		// Build the string that triggers are matched against.
+		// For comment events: the comment body.
+		// For pull_request events: "closed:merged" or "closed:unmerged", etc.
+		var matchString string
+		var commentBody, commentAuthor string
+		switch eventType {
+		case "issue_comment", "pull_request_review_comment":
+			if event.Action != "created" {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("action ignored\n"))
+				return
+			}
+			commentBody = event.Comment.Body
+			commentAuthor = event.Comment.User.Login
+		case "pull_request_review":
+			if event.Action != "submitted" {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("action ignored\n"))
+				return
+			}
+			commentBody = event.Review.Body
+			commentAuthor = event.Review.User.Login
+		case "pull_request":
+			merged := "unmerged"
+			if event.PullRequest.Merged {
+				merged = "merged"
+			}
+			matchString = event.Action + ":" + merged
+		default:
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("action ignored\n"))
+			w.Write([]byte("event ignored\n"))
 			return
 		}
 
-		if !strings.Contains(event.Comment.Body, "/cc") {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("no /cc trigger\n"))
-			return
+		if matchString == "" {
+			matchString = commentBody
 		}
 
 		prNumber := event.PullRequest.Number
@@ -91,22 +116,28 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			RepoFullName:  event.Repository.FullName,
 			RepoCloneURL:  event.Repository.CloneURL,
 			PRNumber:      fmt.Sprintf("%d", prNumber),
-			CommentBody:   event.Comment.Body,
-			CommentAuthor: event.Comment.User.Login,
+			CommentBody:   commentBody,
+			CommentAuthor: commentAuthor,
 			EventType:     eventType,
 		}
 
 		matched := false
 		for name, wf := range cfg.Workflows {
+			if !eventMatches(eventType, wf.Events) {
+				continue
+			}
+			if len(wf.Authors) > 0 && !authorAllowed(commentAuthor, wf.Authors) {
+				continue
+			}
 			re, err := regexp.Compile(wf.Trigger)
 			if err != nil {
 				log.Printf("Invalid trigger regex for workflow %q: %v", name, err)
 				continue
 			}
-			if re.MatchString(event.Comment.Body) {
+			if re.MatchString(matchString) {
 				matched = true
-				log.Printf("Workflow %q triggered by %s on %s#%d",
-					name, event.Comment.User.Login, event.Repository.FullName, prNumber)
+				log.Printf("Workflow %q triggered by event %s on %s#%d",
+					name, eventType, event.Repository.FullName, prNumber)
 				go workflow.Execute(name, wf, vars)
 			}
 		}
@@ -119,6 +150,24 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			w.Write([]byte("no matching workflow\n"))
 		}
 	}
+}
+
+func eventMatches(eventType string, events []string) bool {
+	for _, e := range events {
+		if e == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func authorAllowed(author string, allowed []string) bool {
+	for _, a := range allowed {
+		if strings.EqualFold(a, author) {
+			return true
+		}
+	}
+	return false
 }
 
 func VerifySignature(payload []byte, signature, secret string) bool {

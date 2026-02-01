@@ -10,10 +10,12 @@ import (
 )
 
 type WorkflowConfig struct {
-	Trigger string `yaml:"trigger"`
-	Command string `yaml:"command"`
-	Workdir string `yaml:"workdir"`
-	Timeout int    `yaml:"timeout"`
+	Events  []string `yaml:"events"`
+	Authors []string `yaml:"authors"`
+	Trigger string   `yaml:"trigger"`
+	Command string   `yaml:"command"`
+	Workdir string   `yaml:"workdir"`
+	Timeout int      `yaml:"timeout"`
 }
 
 type FunnelConfig struct {
@@ -80,6 +82,9 @@ func ApplyDefaults(cfg *Config) {
 	for name, wf := range cfg.Workflows {
 		if wf.Timeout == 0 {
 			wf.Timeout = 300
+		}
+		if len(wf.Events) == 0 {
+			wf.Events = []string{"issue_comment", "pull_request_review_comment", "pull_request_review"}
 		}
 		cfg.Workflows[name] = wf
 	}

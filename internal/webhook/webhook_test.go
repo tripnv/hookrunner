@@ -49,7 +49,7 @@ func TestVerifySignature(t *testing.T) {
 	})
 }
 
-func makeTestPayload(action, body, repo string, prNum int) string {
+func makeCommentPayload(action, body, repo string, prNum int) string {
 	event := map[string]interface{}{
 		"action": action,
 		"comment": map[string]interface{}{
@@ -70,6 +70,22 @@ func makeTestPayload(action, body, repo string, prNum int) string {
 	return string(data)
 }
 
+func makePRPayload(action, repo string, prNum int, merged bool) string {
+	event := map[string]interface{}{
+		"action": action,
+		"pull_request": map[string]interface{}{
+			"number": prNum,
+			"merged": merged,
+		},
+		"repository": map[string]interface{}{
+			"full_name": repo,
+			"clone_url": "https://github.com/" + repo + ".git",
+		},
+	}
+	data, _ := json.Marshal(event)
+	return string(data)
+}
+
 func TestWebhookHandler(t *testing.T) {
 	secret := "test-secret"
 	cfg := &config.Config{
@@ -77,6 +93,7 @@ func TestWebhookHandler(t *testing.T) {
 		Port:          7890,
 		Workflows: map[string]config.WorkflowConfig{
 			"test": {
+				Events:  []string{"issue_comment", "pull_request_review_comment", "pull_request_review"},
 				Trigger: `/cc\s+@claude`,
 				Command: "echo test",
 				Timeout: 5,
@@ -121,7 +138,7 @@ func TestWebhookHandler(t *testing.T) {
 	})
 
 	t.Run("ignores edited comments", func(t *testing.T) {
-		body := makeTestPayload("edited", "/cc @claude", "org/repo", 1)
+		body := makeCommentPayload("edited", "/cc @claude", "org/repo", 1)
 		sig := computeHMAC(body, secret)
 		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", sig)
@@ -136,8 +153,8 @@ func TestWebhookHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("ignores comments without /cc", func(t *testing.T) {
-		body := makeTestPayload("created", "looks good to me", "org/repo", 1)
+	t.Run("ignores comments without trigger", func(t *testing.T) {
+		body := makeCommentPayload("created", "looks good to me", "org/repo", 1)
 		sig := computeHMAC(body, secret)
 		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", sig)
@@ -147,13 +164,13 @@ func TestWebhookHandler(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
-		if !strings.Contains(w.Body.String(), "no /cc trigger") {
-			t.Errorf("expected 'no /cc trigger', got %q", w.Body.String())
+		if !strings.Contains(w.Body.String(), "no matching workflow") {
+			t.Errorf("expected 'no matching workflow', got %q", w.Body.String())
 		}
 	})
 
 	t.Run("dispatches matching workflow", func(t *testing.T) {
-		body := makeTestPayload("created", "/cc @claude please review", "org/repo", 42)
+		body := makeCommentPayload("created", "/cc @claude please review", "org/repo", 42)
 		sig := computeHMAC(body, secret)
 		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", sig)
@@ -166,7 +183,7 @@ func TestWebhookHandler(t *testing.T) {
 	})
 
 	t.Run("no matching workflow", func(t *testing.T) {
-		body := makeTestPayload("created", "/cc @someone-else", "org/repo", 42)
+		body := makeCommentPayload("created", "/cc @someone-else", "org/repo", 42)
 		sig := computeHMAC(body, secret)
 		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", sig)
@@ -178,6 +195,174 @@ func TestWebhookHandler(t *testing.T) {
 		}
 		if !strings.Contains(w.Body.String(), "no matching workflow") {
 			t.Errorf("expected 'no matching workflow', got %q", w.Body.String())
+		}
+	})
+
+	t.Run("comment workflow ignores pull_request event", func(t *testing.T) {
+		body := makePRPayload("closed", "org/repo", 42, true)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "no matching workflow") {
+			t.Errorf("expected 'no matching workflow', got %q", w.Body.String())
+		}
+	})
+}
+
+func makeReviewPayload(action, body, repo string, prNum int) string {
+	event := map[string]interface{}{
+		"action": action,
+		"review": map[string]interface{}{
+			"body": body,
+			"user": map[string]interface{}{
+				"login": "reviewer",
+			},
+		},
+		"pull_request": map[string]interface{}{
+			"number": prNum,
+		},
+		"repository": map[string]interface{}{
+			"full_name": repo,
+			"clone_url": "https://github.com/" + repo + ".git",
+		},
+	}
+	data, _ := json.Marshal(event)
+	return string(data)
+}
+
+func TestPullRequestReview(t *testing.T) {
+	secret := "test-secret"
+	cfg := &config.Config{
+		WebhookSecret: secret,
+		Port:          7890,
+		Workflows: map[string]config.WorkflowConfig{
+			"test": {
+				Events:  []string{"issue_comment", "pull_request_review_comment", "pull_request_review"},
+				Trigger: `/cc\s+@claude`,
+				Command: "echo test",
+				Timeout: 5,
+			},
+		},
+	}
+
+	handler := Handler(cfg)
+
+	t.Run("dispatches on review with /cc", func(t *testing.T) {
+		body := makeReviewPayload("submitted", "/cc @claude please review", "org/repo", 42)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request_review")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Errorf("expected 202, got %d", w.Code)
+		}
+	})
+
+	t.Run("ignores review without trigger", func(t *testing.T) {
+		body := makeReviewPayload("submitted", "looks good", "org/repo", 42)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request_review")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "no matching workflow") {
+			t.Errorf("expected 'no matching workflow', got %q", w.Body.String())
+		}
+	})
+
+	t.Run("ignores non-submitted review action", func(t *testing.T) {
+		body := makeReviewPayload("edited", "/cc @claude", "org/repo", 42)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request_review")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+}
+
+func TestPullRequestMergeWorkflow(t *testing.T) {
+	secret := "test-secret"
+	cfg := &config.Config{
+		WebhookSecret: secret,
+		Port:          7890,
+		Workflows: map[string]config.WorkflowConfig{
+			"cleanup": {
+				Events:  []string{"pull_request"},
+				Trigger: `^closed:merged$`,
+				Command: "echo cleanup",
+				Timeout: 5,
+			},
+		},
+	}
+
+	handler := Handler(cfg)
+
+	t.Run("dispatches on merged PR", func(t *testing.T) {
+		body := makePRPayload("closed", "org/repo", 42, true)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Errorf("expected 202, got %d", w.Code)
+		}
+	})
+
+	t.Run("ignores closed-but-unmerged PR", func(t *testing.T) {
+		body := makePRPayload("closed", "org/repo", 42, false)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("ignores opened PR", func(t *testing.T) {
+		body := makePRPayload("opened", "org/repo", 42, false)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "pull_request")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("ignores comment events", func(t *testing.T) {
+		body := makeCommentPayload("created", "/cc @claude", "org/repo", 42)
+		sig := computeHMAC(body, secret)
+		req := httptest.NewRequest("POST", "/webhook", strings.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Event", "issue_comment")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		// cleanup workflow only listens to pull_request, so no match
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
 		}
 	})
 }
