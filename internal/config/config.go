@@ -71,7 +71,7 @@ func Load(path string) (*Config, error) {
 
 func ApplyDefaults(cfg *Config) {
 	if cfg.Port == 0 {
-		cfg.Port = 7890
+		cfg.Port = 8443
 	}
 	if cfg.Daemon.PIDFile == "" {
 		cfg.Daemon.PIDFile = "~/.hookrunner/hookrunner.pid"
@@ -94,8 +94,12 @@ func ValidateConfig(cfg *Config) error {
 	if cfg.WebhookSecret == "" {
 		return fmt.Errorf("webhook_secret is required")
 	}
+	validFunnelPorts := map[int]bool{443: true, 8443: true, 10000: true}
 	if cfg.Port < 1 || cfg.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	if cfg.Funnel.Enabled && !validFunnelPorts[cfg.Port] {
+		return fmt.Errorf("port must be 443, 8443, or 10000 when funnel is enabled")
 	}
 	for name, wf := range cfg.Workflows {
 		if wf.Trigger == "" {
@@ -109,7 +113,7 @@ func ValidateConfig(cfg *Config) error {
 }
 
 const DefaultConfigYAML = `webhook_secret: "changeme"
-port: 7890
+port: 8443
 funnel:
   enabled: true
   url: ""
@@ -118,7 +122,7 @@ daemon:
   log_file: "~/.hookrunner/hookrunner.log"
 workflows:
   claude-review:
-    trigger: '/cc\s+@claude'
+    trigger: '/cc'
     command: 'claude -p "Review PR #{{.PRNumber}} in {{.RepoFullName}}"'
     workdir: "~/repos/{{.RepoFullName}}"
     timeout: 300

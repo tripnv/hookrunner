@@ -14,7 +14,8 @@ type Process struct {
 }
 
 func Start(port int, urlOverride string) (*Process, error) {
-	args := []string{"funnel", fmt.Sprintf("%d", port)}
+	target := fmt.Sprintf("http://localhost:%d", port)
+	args := []string{"funnel", "--https", fmt.Sprintf("%d", port), target}
 	cmd := exec.Command("tailscale", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
