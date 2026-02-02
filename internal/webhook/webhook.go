@@ -112,6 +112,14 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			prNumber = event.Issue.Number
 		}
 
+		// Event header
+		log.Printf("════════════════════════════════════════")
+		log.Printf("EVENT: %s [%s] on %s#%d by %s",
+			eventType, event.Action, event.Repository.FullName, prNumber, commentAuthor)
+		if commentBody != "" {
+			log.Printf("Body: %s", commentBody)
+		}
+
 		vars := workflow.TemplateVars{
 			RepoFullName:  event.Repository.FullName,
 			RepoCloneURL:  event.Repository.CloneURL,
@@ -136,8 +144,7 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			}
 			if re.MatchString(matchString) {
 				matched = true
-				log.Printf("Workflow %q triggered by event %s on %s#%d",
-					name, eventType, event.Repository.FullName, prNumber)
+				log.Printf("Matched workflow: %q", name)
 				go workflow.Execute(name, wf, vars)
 			}
 		}
@@ -146,6 +153,8 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			w.WriteHeader(http.StatusAccepted)
 			w.Write([]byte("workflow dispatched\n"))
 		} else {
+			log.Printf("No matching workflow")
+			log.Printf("════════════════════════════════════════")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("no matching workflow\n"))
 		}

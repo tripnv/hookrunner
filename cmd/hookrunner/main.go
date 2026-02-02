@@ -19,6 +19,7 @@ import (
 var version = "dev"
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	configPath := flag.String("config", "", "Config file path (default: ~/.hookrunner/config.yaml)")
 	daemonFlag := flag.Bool("daemon", false, "Run as background daemon")
 	stop := flag.Bool("stop", false, "Stop running daemon")

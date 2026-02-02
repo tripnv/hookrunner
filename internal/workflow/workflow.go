@@ -75,7 +75,10 @@ func Execute(name string, wf config.WorkflowConfig, vars TemplateVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	log.Printf("Workflow %q: executing: %s", name, cmd)
+	log.Printf("────── Workflow %q started ──────", name)
+	log.Printf("Command: %s", cmd)
+
+	start := time.Now()
 
 	proc := exec.CommandContext(ctx, "sh", "-c", cmd)
 	proc.Env = append(os.Environ(),
@@ -90,17 +93,26 @@ func Execute(name string, wf config.WorkflowConfig, vars TemplateVars) {
 	}
 
 	output, err := proc.CombinedOutput()
+	duration := time.Since(start)
 	outStr := strings.TrimSpace(string(output))
 
 	if ctx.Err() == context.DeadlineExceeded {
 		log.Printf("Workflow %q: timed out after %ds", name, wf.Timeout)
+		log.Printf("────── Workflow %q timed out (%.1fs) ──────", name, duration.Seconds())
+		log.Printf("════════════════════════════════════════")
 		return
 	}
 
 	if err != nil {
 		log.Printf("Workflow %q: error: %v\nOutput: %s", name, err, outStr)
+		log.Printf("────── Workflow %q failed (%.1fs) ──────", name, duration.Seconds())
+		log.Printf("════════════════════════════════════════")
 		return
 	}
 
-	log.Printf("Workflow %q: completed successfully\nOutput: %s", name, outStr)
+	if outStr != "" {
+		log.Printf("Output: %s", outStr)
+	}
+	log.Printf("────── Workflow %q completed (%.1fs) ──────", name, duration.Seconds())
+	log.Printf("════════════════════════════════════════")
 }

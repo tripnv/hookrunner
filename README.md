@@ -58,7 +58,7 @@ tailscale funnel status
 
 ## Configuration
 
-See [`HANDOFF.md`](HANDOFF.md) for full configuration reference, template variables, environment variables, filtering pipeline, and architecture details.
+See [`REFERENCE.md`](REFERENCE.md) for full configuration reference, including a sample config, template variables, environment variables, filtering pipeline, and architecture details.
 
 ## Daemon Mode
 
