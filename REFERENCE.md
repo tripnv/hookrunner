@@ -1,4 +1,4 @@
-# hookrunner -- Handoff Document
+# hookrunner -- Reference
 
 ## What is hookrunner?
 
@@ -163,7 +163,7 @@ All workflows receive these env vars:
 
 ## Filtering Pipeline
 
-Workflows are evaluated in this order. The first matching workflow is dispatched:
+Workflows are evaluated in this order. All matching workflows are dispatched:
 
 1. **Event type** -- Is the incoming event in the workflow's `events` list?
 2. **Action** -- For comments, is the action `created`? For reviews, is it `submitted`?
