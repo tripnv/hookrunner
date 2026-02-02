@@ -2,20 +2,33 @@
 
 A lightweight local server that listens for GitHub webhook events, watches for `/cc` mentions in PRs and issues, and dispatches local workflows in response.
 
+## Install
+
+Download the latest release binary:
+
+```bash
+gh release download v0.1.0 --repo tripnv/hookrunner --pattern 'hookrunner'
+chmod +x hookrunner
+sudo mv hookrunner /usr/local/bin/
+```
+
+Or build from source:
+
+```bash
+go build -o hookrunner ./cmd/hookrunner
+```
+
 ## Quick Start
 
 ```bash
-# Build
-go build -o hookrunner ./cmd/hookrunner
-
 # Generate default config
-./hookrunner --init
+hookrunner --init
 
 # Edit config with your webhook secret and workflows
 $EDITOR ~/.hookrunner/config.yaml
 
 # Run
-./hookrunner
+hookrunner
 ```
 
 ## GitHub Webhook Setup
@@ -63,7 +76,7 @@ See [`REFERENCE.md`](REFERENCE.md) for full configuration reference, including a
 ## Daemon Mode
 
 ```bash
-./hookrunner --daemon    # Start in background
-./hookrunner --status    # Check if running
-./hookrunner --stop      # Stop daemon
+hookrunner --daemon    # Start in background
+hookrunner --status    # Check if running
+hookrunner --stop      # Stop daemon
 ```
