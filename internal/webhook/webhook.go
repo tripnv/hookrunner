@@ -25,7 +25,10 @@ type webhookEvent struct {
 		} `json:"user"`
 	} `json:"comment"`
 	Issue struct {
-		Number int `json:"number"`
+		Number      int `json:"number"`
+		PullRequest *struct {
+			URL string `json:"url"`
+		} `json:"pull_request"`
 	} `json:"issue"`
 	Review struct {
 		Body string `json:"body"`
@@ -112,10 +115,14 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			prNumber = event.Issue.Number
 		}
 
-		// Event header
+		// Event header — show "pr_comment" instead of "issue_comment" for PR comments
+		displayEvent := eventType
+		if eventType == "issue_comment" && event.Issue.PullRequest != nil {
+			displayEvent = "pr_comment"
+		}
 		log.Printf("════════════════════════════════════════")
 		log.Printf("EVENT: %s [%s] on %s#%d by %s",
-			eventType, event.Action, event.Repository.FullName, prNumber, commentAuthor)
+			displayEvent, event.Action, event.Repository.FullName, prNumber, commentAuthor)
 		if commentBody != "" {
 			log.Printf("Body: %s", commentBody)
 		}
