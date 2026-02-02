@@ -18,6 +18,16 @@ Or build from source:
 go build -o hookrunner ./cmd/hookrunner
 ```
 
+Add the binary to your PATH so you can run `hookrunner` from anywhere:
+
+```bash
+# If installed to /usr/local/bin (already on most PATHs), no action needed.
+
+# Or if built from source, add the build directory to your PATH:
+echo 'export PATH="/path/to/hookrunner:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ## Quick Start
 
 ```bash
